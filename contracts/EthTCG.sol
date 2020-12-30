@@ -94,7 +94,23 @@ contract CardBase {
     mapping(uint256 => address) cardIdToApprovedAddress;
     mapping(address => mapping(address => bool)) operatorToCanOperateForOwner;
     uint256 totalCards;
-    Card[] allCards;
+    Card[] cards;
+
+    function createCard(
+        uint8 _cost,
+        string calldata _name,
+        address owner
+    ) internal returns (uint256) {
+        Card memory _card = Card({cost: _cost, name: _name});
+
+        cards.push(_card);
+        totalCards++;
+
+        ownerCardCount[owner]++;
+        cardIdToOwner[totalCards - 1] = owner;
+
+        return totalCards - 1;
+    }
 }
 
 contract CardOwnership is CardBase, ERC721, ERC165 {
@@ -265,5 +281,21 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
         returns (bool)
     {
         return operatorToCanOperateForOwner[_operator][_owner];
+    }
+}
+
+contract CardMinting is CardOwnership, Owner {
+    uint256 public constant maxPromoCards = 100;
+    uint256 public currentPromoCards = 0;
+
+    function mintPromoCard(
+        uint8 _cost,
+        string calldata _name,
+        address _owner
+    ) public onlyOwner {
+        require(currentPromoCards < maxPromoCards);
+
+        createCard(_cost, _name, _owner);
+        currentPromoCards++;
     }
 }

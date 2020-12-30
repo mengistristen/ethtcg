@@ -1,5 +1,5 @@
-const CardOwnership = artifacts.require('CardOwnership')
+const CardMinting = artifacts.require('CardMinting')
 
 module.exports = function (deployer) {
-  deployer.deploy(CardOwnership)
+  deployer.deploy(CardMinting)
 }
