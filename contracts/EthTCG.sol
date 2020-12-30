@@ -134,6 +134,9 @@ contract CardBase {
 }
 
 contract CardOwnership is CardBase, ERC721, ERC165 {
+    string public constant name = "EthTCG";
+    string public constant symbol = "ETCG";
+
     // Constants for supporting interface ERC165
     bytes4 constant InterfaceSignature_ERC165 =
         bytes4(keccak256("supportsInterface(bytes4)"));
