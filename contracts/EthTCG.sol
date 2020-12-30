@@ -57,42 +57,6 @@ interface ERC165 {
     function supportsInterface(bytes4 interfaceID) external view returns (bool);
 }
 
-library GetCode {
-    function at(address _addr) public view returns (bytes memory o_code) {
-        assembly {
-            // retrieve the size of the code, this needs assembly
-            let size := extcodesize(_addr)
-            // allocate output byte array - this could also be done without assembly
-            // by using o_code = new bytes(size)
-            o_code := mload(0x40)
-            // new "memory end" including padding
-            mstore(
-                0x40,
-                add(o_code, and(add(add(size, 0x20), 0x1f), not(0x1f)))
-            )
-            // store length in memory
-            mstore(o_code, size)
-            // actually retrieve the code, this needs assembly
-            extcodecopy(_addr, add(o_code, 0x20), 0, size)
-        }
-    }
-}
-
-library BytesLibrary {
-    function sliceUint(bytes memory bs, uint256 start)
-        internal
-        pure
-        returns (uint256)
-    {
-        require(bs.length >= start + 32, "slicing out of range");
-        uint256 x;
-        assembly {
-            x := mload(add(bs, add(0x20, start)))
-        }
-        return x;
-    }
-}
-
 interface ERC721TokenReceiver {
     function onERC721Recieved(
         address _from,
@@ -144,14 +108,17 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
     bytes4 constant InterfaceSignature_ERC721 =
         bytes4(keccak256("name()")) ^
             bytes4(keccak256("symbol()")) ^
-            bytes4(keccak256("totalSupply()")) ^
             bytes4(keccak256("balanceOf(address)")) ^
             bytes4(keccak256("ownerOf(uint256)")) ^
-            bytes4(keccak256("approve(address,uint256)")) ^
-            bytes4(keccak256("transfer(address,uint256)")) ^
+            bytes4(
+                keccak256("safeTransferFrom(address,address,uint256,bytes)")
+            ) ^
+            bytes4(keccak256("safeTransferFrom(address,address,uint256)")) ^
             bytes4(keccak256("transferFrom(address,address,uint256)")) ^
-            bytes4(keccak256("tokensOfOwner(address)")) ^
-            bytes4(keccak256("tokenMetadata(uint256,string)"));
+            bytes4(keccak256("approve(address, uint256)")) ^
+            bytes4(keccak256("setApprovalForAll(address,bool)")) ^
+            bytes4(keccak256("getApproved(uint256)")) ^
+            bytes4(keccak256("isApprovedForAll(address,address)"));
 
     // Support for ERC165
     function supportsInterface(bytes4 interfaceID)
@@ -212,7 +179,15 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
         ownerCardCount[_from]--;
         ownerCardCount[_to]++;
 
-        if (BytesLibrary.sliceUint(GetCode.at(_to), 0) > 0) {
+        // Retrieve _to address code size
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(_to)
+        }
+
+        // if _to has code, it is a contract
+        // check that it implements the ERC721TokenReciever interface
+        if (codeSize > 0) {
             ERC721TokenReceiver toContract = ERC721TokenReceiver(_to);
 
             require(
