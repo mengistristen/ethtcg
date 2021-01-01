@@ -94,23 +94,7 @@ contract CardBase {
     mapping(uint256 => address) cardIdToApprovedAddress;
     mapping(address => mapping(address => bool)) operatorToCanOperateForOwner;
     uint256 totalCards;
-    Card[] cards;
-
-    function createCard(
-        uint8 _cost,
-        string calldata _name,
-        address owner
-    ) internal returns (uint256) {
-        Card memory _card = Card({cost: _cost, name: _name});
-
-        cards.push(_card);
-        totalCards++;
-
-        ownerCardCount[owner]++;
-        cardIdToOwner[totalCards - 1] = owner;
-
-        return totalCards - 1;
-    }
+    Card[] internal cards;
 }
 
 contract CardOwnership is CardBase, ERC721, ERC165 {
@@ -163,6 +147,54 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
         _;
     }
 
+    function _safeTransfer(
+        address _from,
+        address _to,
+        uint256 _tokenId,
+        bytes memory data
+    ) internal {
+        cardIdToOwner[_tokenId] = _to;
+        ownerCardCount[_to]++;
+
+        if (_from != address(0)) ownerCardCount[_from]--;
+
+        // Retrieve _to address code size
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(_to)
+        }
+
+        // if _to has code, it is a contract
+        // check that it implements the ERC721TokenReciever interface
+        if (codeSize > 0) {
+            ERC721TokenReceiver toContract = ERC721TokenReceiver(_to);
+
+            require(
+                toContract.onERC721Received(_from, _to, _tokenId, data) ==
+                    bytes4(
+                        keccak256(
+                            "onERC721Received(address,address,uint256,bytes)"
+                        )
+                    )
+            );
+        }
+
+        emit Transfer(_from, _to, _tokenId);
+    }
+
+    function _transfer(
+        address _from,
+        address _to,
+        uint256 _tokenId
+    ) internal {
+        cardIdToOwner[_tokenId] = _to;
+        ownerCardCount[_to]++;
+
+        if (_from != address(0)) ownerCardCount[_from]--;
+
+        emit Transfer(_from, _to, _tokenId);
+    }
+
     function balanceOf(address _owner)
         external
         view
@@ -191,32 +223,7 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
         uint256 _tokenId,
         bytes memory data
     ) external payable override onlyValidTransfer(_from, _to, _tokenId) {
-        cardIdToOwner[_tokenId] = _to;
-        ownerCardCount[_from]--;
-        ownerCardCount[_to]++;
-
-        // Retrieve _to address code size
-        uint256 codeSize;
-        assembly {
-            codeSize := extcodesize(_to)
-        }
-
-        // if _to has code, it is a contract
-        // check that it implements the ERC721TokenReciever interface
-        if (codeSize > 0) {
-            ERC721TokenReceiver toContract = ERC721TokenReceiver(_to);
-
-            require(
-                toContract.onERC721Received(_from, _to, _tokenId, data) ==
-                    bytes4(
-                        keccak256(
-                            "onERC721Received(address,address,uint256,bytes)"
-                        )
-                    )
-            );
-        }
-
-        emit Transfer(_from, _to, _tokenId);
+        _safeTransfer(_from, _to, _tokenId, data);
     }
 
     function safeTransferFrom(
@@ -224,7 +231,7 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
         address _to,
         uint256 _tokenId
     ) external payable override {
-        this.safeTransferFrom(_from, _to, _tokenId, "");
+        _safeTransfer(_from, _to, _tokenId, "");
     }
 
     function transferFrom(
@@ -232,11 +239,7 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
         address _to,
         uint256 _tokenId
     ) external payable override onlyValidTransfer(_from, _to, _tokenId) {
-        cardIdToOwner[_tokenId] = _to;
-        ownerCardCount[_from]--;
-        ownerCardCount[_to]++;
-
-        emit Transfer(_from, _to, _tokenId);
+        _transfer(_from, _to, _tokenId);
     }
 
     function approve(address _approved, uint256 _tokenId)
@@ -288,6 +291,21 @@ contract CardMinting is CardOwnership, Owner {
     uint256 public constant maxPromoCards = 100;
     uint256 public currentPromoCards = 0;
 
+    function _createCard(
+        uint8 _cost,
+        string calldata _name,
+        address _owner
+    ) internal returns (uint256) {
+        Card memory _card = Card({cost: _cost, name: _name});
+
+        cards.push(_card);
+        totalCards++;
+
+        _transfer(address(0), _owner, totalCards - 1);
+
+        return totalCards - 1;
+    }
+
     function mintPromoCard(
         uint8 _cost,
         string calldata _name,
@@ -295,7 +313,7 @@ contract CardMinting is CardOwnership, Owner {
     ) public onlyOwner {
         require(currentPromoCards < maxPromoCards);
 
-        createCard(_cost, _name, _owner);
+        _createCard(_cost, _name, _owner);
         currentPromoCards++;
     }
 }
