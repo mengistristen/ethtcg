@@ -58,7 +58,7 @@ interface ERC165 {
 }
 
 interface ERC721TokenReceiver {
-    function onERC721Recieved(
+    function onERC721Received(
         address _from,
         address _to,
         uint256 _tokenID,
@@ -207,10 +207,10 @@ contract CardOwnership is CardBase, ERC721, ERC165 {
             ERC721TokenReceiver toContract = ERC721TokenReceiver(_to);
 
             require(
-                toContract.onERC721Recieved(_from, _to, _tokenId, data) ==
+                toContract.onERC721Received(_from, _to, _tokenId, data) ==
                     bytes4(
                         keccak256(
-                            "onERC721Recieved(address,address,uint256,bytes)"
+                            "onERC721Received(address,address,uint256,bytes)"
                         )
                     )
             );
